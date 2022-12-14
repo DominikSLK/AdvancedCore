@@ -51,9 +51,11 @@ public class ClientHandler {
 		}
 		String encrypted = encryptionHandler.encrypt(msg);
 		try {
-			DataOutputStream ds = new DataOutputStream(clientSocket.getOutputStream());
-			ds.writeUTF(encrypted);
-			ds.close();
+			if(clientSocket != null) {
+				DataOutputStream ds = new DataOutputStream(clientSocket.getOutputStream());
+				ds.writeUTF(encrypted);
+				ds.close();
+			}
 		} catch (IOException e1) {
 			e1.printStackTrace();
 		}
