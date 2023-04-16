@@ -9,8 +9,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.bukkit.Bukkit;
-
 import com.bencodez.advancedcore.AdvancedCorePlugin;
 import com.bencodez.advancedcore.api.time.events.DateChangedEvent;
 import com.bencodez.advancedcore.api.time.events.DayChangeEvent;
@@ -27,19 +25,28 @@ public class TimeChecker {
 
 	private AdvancedCorePlugin plugin;
 
-	private boolean processing = false;
+	@Getter
+	private boolean activeProcessing = false;
 
 	@Getter
 	private ScheduledExecutorService timer;
 
 	private boolean timerLoaded = false;
 
+	@Getter
+	private boolean processingEnabled = true;
+
+	public void setProcessingEnabled(boolean value) {
+		processingEnabled = value;
+		plugin.debug("Local time change processing disabled");
+	}
+
 	public TimeChecker(AdvancedCorePlugin plugin) {
 		this.plugin = plugin;
 	}
 
 	public void forceChanged(TimeType time) {
-		Bukkit.getScheduler().runTaskAsynchronously(plugin, new Runnable() {
+		timer.execute(new Runnable() {
 
 			@Override
 			public void run() {
@@ -48,8 +55,8 @@ public class TimeChecker {
 		});
 	}
 
-	private void forceChanged(TimeType time, boolean fake, boolean preDate, boolean postDate) {
-		processing = true;
+	public synchronized void forceChanged(TimeType time, boolean fake, boolean preDate, boolean postDate) {
+		activeProcessing = true;
 		try {
 			plugin.debug("Executing time change events: " + time.toString());
 			plugin.getLogger().info("Time change event: " + time.toString() + ", Fake: " + fake);
@@ -77,12 +84,13 @@ public class TimeChecker {
 				dateChanged.setFake(fake);
 				plugin.getServer().getPluginManager().callEvent(dateChanged);
 			}
+			activeProcessing = false;
 
 			plugin.debug("Finished executing time change events: " + time.toString());
-			processing = false;
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+		activeProcessing = false;
 
 	}
 
@@ -142,7 +150,7 @@ public class TimeChecker {
 		return true;
 	}
 
-	public void loadTimer(int minutes) {
+	public void loadTimer() {
 		if (!timerLoaded) {
 			timerLoaded = true;
 			timer = Executors.newScheduledThreadPool(1);
@@ -161,7 +169,7 @@ public class TimeChecker {
 				@Override
 				public void run() {
 					if (plugin != null && plugin.isEnabled()) {
-						if (!processing) {
+						if (!isActiveProcessing() && isProcessingEnabled()) {
 							update();
 						}
 					} else {
@@ -175,6 +183,19 @@ public class TimeChecker {
 				@Override
 				public void run() {
 					plugin.getServerDataFile().setLastUpdated();
+
+					if (!isProcessingEnabled()) {
+						plugin.debug("Processing time changes locally disabled");
+						if (hasDayChanged(false)) {
+							hasDayChanged(true);
+						}
+						if (hasWeekChanged(false)) {
+							hasWeekChanged(true);
+						}
+						if (hasMonthChanged(false)) {
+							hasMonthChanged(true);
+						}
+					}
 				}
 			}, 60, 60, TimeUnit.MINUTES);
 		} else {
@@ -189,6 +210,7 @@ public class TimeChecker {
 		if (plugin == null) {
 			return;
 		}
+
 		if (hasTimeOffSet()) {
 			plugin.extraDebug("TimeHourOffSet: " + getTime().getHour() + ":" + getTime().getMinute());
 		}
@@ -201,21 +223,33 @@ public class TimeChecker {
 			plugin.getLogger().info("Ignoring time change events for one time only");
 		}
 
-		if (!processing) {
+		if (!isActiveProcessing()) {
 			// stagger process time change events to prevent overloading mysql table
 			if (hasMonthChanged(false)) {
 				plugin.getLogger().info("Detected month changed, processing...");
-				forceChanged(TimeType.MONTH, false, true, true);
+				if (isProcessingEnabled()) {
+					forceChanged(TimeType.MONTH, false, true, true);
+				} else {
+					plugin.debug("Processing time changes locally disabled");
+				}
 				hasMonthChanged(true);
 				plugin.getLogger().info("Finished processing month changes");
 			} else if (hasWeekChanged(false)) {
 				plugin.getLogger().info("Detected week changed, processing...");
-				forceChanged(TimeType.WEEK, false, true, true);
+				if (isProcessingEnabled()) {
+					forceChanged(TimeType.WEEK, false, true, true);
+				} else {
+					plugin.debug("Processing time changes locally disabled");
+				}
 				hasWeekChanged(true);
 				plugin.getLogger().info("Finished processing week changes");
 			} else if (hasDayChanged(false)) {
 				plugin.getLogger().info("Detected day changed, processing...");
-				forceChanged(TimeType.DAY, false, true, true);
+				if (isProcessingEnabled()) {
+					forceChanged(TimeType.DAY, false, true, true);
+				} else {
+					plugin.debug("Processing time changes locally disabled");
+				}
 				hasDayChanged(true);
 				plugin.getLogger().info("Finished processing day changes");
 			}

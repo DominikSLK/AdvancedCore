@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Map.Entry;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,6 +30,7 @@ import com.bencodez.advancedcore.api.item.ItemBuilder;
 import com.bencodez.advancedcore.api.misc.jsonparser.JsonParser;
 import com.bencodez.advancedcore.api.skull.SkullHandler;
 import com.bencodez.advancedcore.api.user.AdvancedCoreUser;
+import com.bencodez.advancedcore.api.user.UserStorage;
 import com.bencodez.advancedcore.nms.NMSManager;
 import com.google.common.collect.Iterables;
 import com.google.gson.JsonElement;
@@ -226,24 +228,28 @@ public class PlayerUtils {
 			return player.getUniqueId().toString();
 		}
 
-		String uuid = getUUIDLookup(playerName);
+		if (plugin.getOptions().isOnlineMode()) {
+			String uuid = getUUIDLookup(playerName);
 
-		if (!uuid.equals("")) {
-			return uuid;
-		}
+			if (!uuid.equals("")) {
+				return uuid;
+			}
 
-		if (plugin.getOptions().isGeyserPrefixSupport()
-				&& !playerName.startsWith(plugin.getOptions().getGeyserPrefix())) {
-			playerName = playerName.replace(' ', '_');
-			return getUUID(plugin.getOptions().getGeyserPrefix() + playerName);
-		}
+			if (plugin.getOptions().isGeyserPrefixSupport()
+					&& !playerName.startsWith(plugin.getOptions().getGeyserPrefix())) {
+				playerName = playerName.replace(' ', '_');
+				return getUUID(plugin.getOptions().getGeyserPrefix() + playerName);
+			}
 
-		try {
-			OfflinePlayer p = Bukkit.getOfflinePlayer(playerName);
-			return p.getUniqueId().toString();
-		} catch (Exception e) {
-			e.printStackTrace();
-			return getUUIDLookup(playerName);
+			try {
+				OfflinePlayer p = Bukkit.getOfflinePlayer(playerName);
+				return p.getUniqueId().toString();
+			} catch (Exception e) {
+				e.printStackTrace();
+				return getUUIDLookup(playerName);
+			}
+		} else {
+			return UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8)).toString();
 		}
 	}
 
@@ -260,13 +266,25 @@ public class PlayerUtils {
 			}
 		}
 
-		for (String uuid : plugin.getUserManager().getAllUUIDs()) {
-			AdvancedCoreUser user = plugin.getUserManager().getUser(UUID.fromString(uuid));
-			user.dontCache();
-			String name = user.getData().getString("PlayerName", true);
-			if (name != null && name.equals(playerName)) {
-				plugin.getUuidNameCache().put(uuid, playerName);
-				return uuid;
+		if (plugin.getStorageType().equals(UserStorage.MYSQL)) {
+			String name = plugin.getMysql().getUUID(playerName);
+			if (name != null) {
+				return name;
+			}
+		} else if (plugin.getStorageType().equals(UserStorage.SQLITE)) {
+			String name = plugin.getSQLiteUserTable().getUUID(playerName);
+			if (name != null) {
+				return name;
+			}
+		} else {
+			for (String uuid : plugin.getUserManager().getAllUUIDs()) {
+				AdvancedCoreUser user = plugin.getUserManager().getUser(UUID.fromString(uuid));
+				user.dontCache();
+				String name = user.getData().getString("PlayerName", true);
+				if (name != null && name.equals(playerName)) {
+					plugin.getUuidNameCache().put(uuid, playerName);
+					return uuid;
+				}
 			}
 		}
 		return "";

@@ -224,10 +224,16 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 	}
 
 	private void checkCMI() {
-		if (Bukkit.getPluginManager().getPlugin("CMI") != null) {
-			getLogger().info("CMI found, loading hook");
-			cmiHandle = new CMIHandler();
-		}
+		Bukkit.getScheduler().runTaskAsynchronously(javaPlugin, new Runnable() {
+
+			@Override
+			public void run() {
+				if (Bukkit.getPluginManager().getPlugin("CMI") != null) {
+					getLogger().info("CMI found, loading hook");
+					cmiHandle = new CMIHandler();
+				}
+			}
+		});
 	}
 
 	private void checkPlaceHolderAPI() {
@@ -283,6 +289,7 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 		while (uuids.size() > 0) {
 			String uuid = uuids.poll();
 			AdvancedCoreUser user = getUserManager().getUser(UUID.fromString(uuid), false);
+			user.dontCache();
 			debug("Starting convert for " + user.getUUID());
 
 			user.getData().setValues(to, user.getData().getValues(from));
@@ -473,7 +480,7 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 		timeChecker = new TimeChecker(this);
 		if (loadServerData) {
 			serverDataFile.setup();
-			timeChecker.loadTimer(1);
+			timeChecker.loadTimer();
 		}
 
 		// load usermanager
@@ -495,7 +502,6 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 
 		loadValueRequestInputCommands();
 		checkPluginUpdate();
-		rewardHandler.checkDelayedTimedRewards();
 		loadAutoUpdateCheck();
 		loadVersionFile();
 
@@ -593,6 +599,11 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 
 					@Override
 					public void reload() {
+						ArrayList<String> list = new ArrayList<String>();
+						for (Player player : Bukkit.getOnlinePlayers()) {
+							list.add(player.getName());
+						}
+						setReplace(list);
 					}
 
 					@Override
@@ -603,13 +614,18 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 						}
 						setReplace(list);
 					}
-				});
+				}.updateOnLoginLogout());
 
 		TabCompleteHandler.getInstance()
 				.addTabCompleteOption(new TabCompleteHandle("(PlayerExact)", new ArrayList<String>()) {
 
 					@Override
 					public void reload() {
+						ArrayList<String> list = new ArrayList<String>();
+						for (Player player : Bukkit.getOnlinePlayers()) {
+							list.add(player.getName());
+						}
+						setReplace(list);
 					}
 
 					@Override
@@ -620,7 +636,7 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 						}
 						setReplace(list);
 					}
-				});
+				}.updateOnLoginLogout());
 
 		TabCompleteHandler.getInstance().addTabCompleteOption(new TabCompleteHandle("(uuid)", new ArrayList<String>()) {
 
@@ -643,7 +659,7 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 					}
 				}
 			}
-		});
+		}.updateEveryXMinutes(javaPlugin, 30));
 
 		ArrayList<String> options = new ArrayList<String>();
 		options.add("True");
@@ -778,6 +794,7 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 
 		TabCompleteHandler.getInstance().reload();
 		TabCompleteHandler.getInstance().loadTabCompleteOptions();
+		TabCompleteHandler.getInstance().loadTimer();
 	}
 
 	public void loadValueRequestInputCommands() {
@@ -867,8 +884,9 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 			timer.awaitTermination(5, TimeUnit.SECONDS);
 			timeChecker.getTimer().awaitTermination(5, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			debug(e);
 		}
+		rewardHandler.shutdown();
 		loginTimer.shutdownNow();
 		timer.shutdownNow();
 		timeChecker.getTimer().shutdownNow();
@@ -889,8 +907,8 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 	@Override
 	public void onEnable() {
 		javaPlugin = this;
-		timer = Executors.newScheduledThreadPool(1);
-		loginTimer = Executors.newScheduledThreadPool(1);
+		timer = Executors.newSingleThreadScheduledExecutor();
+		loginTimer = Executors.newSingleThreadScheduledExecutor();
 		advancedCoreCommandLoader = CommandLoader.getInstance();
 
 		onPreLoad();
@@ -935,19 +953,9 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 			}
 		}
 		timeChecker.update();
-		rewardHandler.checkDelayedTimedRewards();
 		TabCompleteHandler.getInstance().reload();
 		TabCompleteHandler.getInstance().loadTabCompleteOptions();
 		getRewardHandler().checkSubRewards();
-	}
-
-	/**
-	 * Run.
-	 *
-	 * @param run the run
-	 */
-	public void run(Runnable run) {
-		com.bencodez.advancedcore.thread.Thread.getInstance().run(run);
 	}
 
 	/**
@@ -1014,6 +1022,7 @@ public abstract class AdvancedCorePlugin extends JavaPlugin {
 	}
 
 	public void userStartup() {
+		rewardHandler.startup();
 		Bukkit.getScheduler().runTaskLaterAsynchronously(this, new Runnable() {
 
 			@Override

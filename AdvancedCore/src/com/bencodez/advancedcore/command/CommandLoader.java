@@ -22,6 +22,7 @@ import com.bencodez.advancedcore.api.time.TimeType;
 import com.bencodez.advancedcore.api.updater.UpdateDownloader;
 import com.bencodez.advancedcore.api.user.AdvancedCoreUser;
 import com.bencodez.advancedcore.api.user.UserStorage;
+import com.bencodez.advancedcore.api.user.usercache.keys.UserDataKey;
 import com.bencodez.advancedcore.api.user.usercache.value.DataValue;
 import com.bencodez.advancedcore.api.user.userstorage.DataType;
 import com.bencodez.advancedcore.api.valuerequest.InputMethod;
@@ -93,6 +94,68 @@ public class CommandLoader {
 					});
 
 				}
+			}
+		});
+
+		cmds.add(new CommandHandler(new String[] { "RunSQLQuery", "(List)" }, permPrefix + ".RunSQLQuery",
+				"Execute sql query", true, true) {
+
+			@Override
+			public void execute(CommandSender sender, String[] args) {
+				String str = "";
+				for (int i = 1; i < args.length; i++) {
+					if (i + 1 == args.length) {
+						str += args[i] + ";";
+					} else {
+						str += args[i] + " ";
+					}
+				}
+
+				switch (plugin.getStorageType()) {
+				case FLAT:
+					sendMessage(sender, "FLAT storage doesn't support SQL queries");
+					break;
+				case MYSQL:
+					sendMessage(sender, "Running query: " + str);
+					plugin.getMysql().executeQuery(str);
+					sendMessage(sender, "Query finished: " + str);
+					break;
+				case SQLITE:
+					sendMessage(sender, "Running query: " + str);
+					plugin.getSQLiteUserTable().executeQuery(str);
+					sendMessage(sender, "Query finished: " + str);
+					break;
+				default:
+					break;
+				}
+
+			}
+		});
+
+		cmds.add(new CommandHandler(new String[] { "UpdateMySQLColumnSizes" }, permPrefix + ".UpdateMySQLColumn",
+				"Update current mysql column sizes", true, true) {
+
+			@Override
+			public void execute(CommandSender sender, String[] args) {
+				if (plugin.getOptions().getStorageType().equals(UserStorage.MYSQL)) {
+					for (UserDataKey key : plugin.getUserManager().getDataManager().getKeys()) {
+						plugin.getMysql().alterColumnType(key.getKey(), key.getColumnType());
+					}
+					sendMessage(sender, "&cColumn sizes updated");
+				} else {
+					sendMessage(sender, "&cNot using MySQL");
+				}
+
+			}
+		});
+
+		cmds.add(new CommandHandler(new String[] { "TotalNumberOfUsers" }, permPrefix + ".TotalNumberOfUsers",
+				"Gets current number of users in VotingPlugin database", true, false) {
+
+			@Override
+			public void execute(CommandSender sender, String[] args) {
+				sendMessage(sender, "Total number of users: " + plugin.getUserManager().getAllUUIDs().size());
+
 			}
 		});
 
@@ -343,7 +406,7 @@ public class CommandLoader {
 			});
 		}
 
-		cmds.add(new CommandHandler(new String[] { "ForceTimeChanged", "(TimeType)" }, permPrefix + ".ForceTimeChange",
+		cmds.add(new CommandHandler(new String[] { "ForceTimeChange", "(TimeType)" }, permPrefix + ".ForceTimeChange",
 				"Force time change, use at your own risk!", true, true) {
 
 			@Override
@@ -440,14 +503,32 @@ public class CommandLoader {
 
 			@Override
 			public void execute(CommandSender sender, String[] args) {
-				AdvancedCoreUser user = plugin.getUserManager().getUser(args[1]);
-				String data = args[4];
-				if (data.equalsIgnoreCase("\"\"")) {
-					data = "";
+				String name = args[1];
+				if (name.equalsIgnoreCase("all")) {
+					if (sender.hasPermission(permPrefix + ".SetAllData")) {
+						String data = args[4];
+						if (data.equalsIgnoreCase("\"\"")) {
+							data = "";
+						}
+						for (String uuid : plugin.getUserManager().getAllUUIDs()) {
+							AdvancedCoreUser user = plugin.getUserManager().getUser(UUID.fromString(uuid));
+							user.dontCache();
+							user.getData().setString(args[3], data);
+
+						}
+						sender.sendMessage(
+								StringParser.getInstance().colorize("&cSet all users " + args[3] + " to " + args[4]));
+					}
+				} else {
+					AdvancedCoreUser user = plugin.getUserManager().getUser(args[1]);
+					String data = args[4];
+					if (data.equalsIgnoreCase("\"\"")) {
+						data = "";
+					}
+					user.getData().setString(args[3], data);
+					sender.sendMessage(StringParser.getInstance()
+							.colorize("&cSet " + args[3] + " for " + args[1] + " to " + args[4]));
 				}
-				user.getData().setString(args[3], data);
-				sender.sendMessage(
-						StringParser.getInstance().colorize("&cSet " + args[3] + " for " + args[1] + " to " + args[4]));
 			}
 		});
 

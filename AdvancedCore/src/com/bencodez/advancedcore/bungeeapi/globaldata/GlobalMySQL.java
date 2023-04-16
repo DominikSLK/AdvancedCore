@@ -1,54 +1,34 @@
-package com.bencodez.advancedcore.api.user.userstorage.mysql;
+package com.bencodez.advancedcore.bungeeapi.globaldata;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.bukkit.configuration.ConfigurationSection;
-
-import com.bencodez.advancedcore.AdvancedCorePlugin;
 import com.bencodez.advancedcore.api.messages.StringParser;
 import com.bencodez.advancedcore.api.misc.ArrayUtils;
-import com.bencodez.advancedcore.api.misc.PlayerUtils;
-import com.bencodez.advancedcore.api.user.usercache.keys.UserDataKey;
-import com.bencodez.advancedcore.api.user.usercache.keys.UserDataKeyInt;
 import com.bencodez.advancedcore.api.user.usercache.value.DataValue;
 import com.bencodez.advancedcore.api.user.usercache.value.DataValueInt;
 import com.bencodez.advancedcore.api.user.usercache.value.DataValueString;
 import com.bencodez.advancedcore.api.user.userstorage.Column;
 import com.bencodez.advancedcore.api.user.userstorage.DataType;
-import com.bencodez.advancedcore.api.user.userstorage.mysql.api.config.MysqlConfigSpigot;
+import com.bencodez.advancedcore.api.user.userstorage.mysql.api.MySQL;
+import com.bencodez.advancedcore.api.user.userstorage.mysql.api.config.MysqlConfig;
 import com.bencodez.advancedcore.api.user.userstorage.mysql.api.queries.Query;
 
-import lombok.Getter;
-
-public class MySQL {
+public abstract class GlobalMySQL {
 	private List<String> columns = Collections.synchronizedList(new ArrayList<String>());
 
-	private List<String> intColumns;
-
-	// private HashMap<String, ArrayList<Column>> table;
-
-	@Getter
-	private long lastBackgroundCheck = 0;
-
-	// ConcurrentMap<String, ArrayList<Column>> table = new
-	// ConcurrentHashMap<String, ArrayList<Column>>();
-
-	@Getter
 	private com.bencodez.advancedcore.api.user.userstorage.mysql.api.MySQL mysql;
 
 	private String name;
-
-	private Set<String> names = ConcurrentHashMap.newKeySet();
 
 	private Object object2 = new Object();
 
@@ -56,17 +36,40 @@ public class MySQL {
 
 	private Object object4 = new Object();
 
-	private AdvancedCorePlugin plugin;
+	private List<String> intColumns = new ArrayList<String>();
 
 	private boolean useBatchUpdates = true;
 
-	private Set<String> uuids = ConcurrentHashMap.newKeySet();
+	private Set<String> servers = ConcurrentHashMap.newKeySet();
 
-	public MySQL(AdvancedCorePlugin plugin, String tableName, ConfigurationSection section) {
-		this.plugin = plugin;
-		intColumns = Collections.synchronizedList(plugin.getServerDataFile().getIntColumns());
+	public abstract void debug(String text);
 
-		MysqlConfigSpigot config = new MysqlConfigSpigot(section);
+	public abstract void debug(Exception e);
+
+	public abstract void severe(String text);
+
+	public abstract void warning(String text);
+
+	public GlobalMySQL(String tableName, MySQL mysql) {
+		this.mysql = mysql;
+		this.name = tableName;
+		String sql = "CREATE TABLE IF NOT EXISTS " + getName() + " (";
+		sql += "server VARCHAR(50), ";
+
+		sql += "PRIMARY KEY ( server ));";
+
+		try {
+			Query query = new Query(mysql, sql);
+
+			query.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+
+		loadData();
+	}
+
+	public GlobalMySQL(String tableName, MysqlConfig config) {
 
 		if (config.hasTableNameSet()) {
 			tableName = config.getTableName();
@@ -79,39 +82,29 @@ public class MySQL {
 
 			@Override
 			public void debug(SQLException e) {
-				plugin.debug(e);
+				debug(e);
 			}
 
 			@Override
 			public void severe(String string) {
-				plugin.getLogger().severe(string);
+				severe(string);
 			}
 		};
 		if (!mysql.connect(config)) {
-			plugin.getLogger().warning("Failed to connect to MySQL");
+			warning("Failed to connect to MySQL");
 		}
 		try {
 			Query q = new Query(mysql, "USE `" + config.getDatabase() + "`;");
 			q.executeUpdate();
 		} catch (SQLException e) {
-			plugin.getLogger().severe("Failed to send use database query: " + config.getDatabase() + " Error: "
-					+ e.getMessage() + ", MySQL might still work");
-			plugin.debug(e);
+			severe("Failed to send use database query: " + config.getDatabase() + " Error: " + e.getMessage()
+					+ ", MySQL might still work");
+			debug(e);
 		}
 		String sql = "CREATE TABLE IF NOT EXISTS " + getName() + " (";
-		sql += "uuid VARCHAR(37), ";
+		sql += "server VARCHAR(50), ";
 
-		// add custom column types
-		for (UserDataKey key : plugin.getUserManager().getDataManager().getKeys()) {
-			sql += "`" + key.getKey() + "` " + key.getColumnType() + ", ";
-			if (key instanceof UserDataKeyInt) {
-				if (!intColumns.contains(key.getKey())) {
-					intColumns.add(key.getKey());
-					plugin.getServerDataFile().setIntColumns(intColumns);
-				}
-			}
-		}
-		sql += "PRIMARY KEY ( uuid ));";
+		sql += "PRIMARY KEY ( server ));";
 
 		try {
 			Query query = new Query(mysql, sql);
@@ -122,15 +115,13 @@ public class MySQL {
 		}
 
 		loadData();
-
-		plugin.debug("UseBatchUpdates: " + isUseBatchUpdates());
 	}
 
 	public void addColumn(String column, DataType dataType) {
 		synchronized (object3) {
 			String sql = "ALTER TABLE " + getName() + " ADD COLUMN `" + column + "` text" + ";";
 
-			plugin.debug("Adding column: " + column + " Current columns: "
+			debug("Adding column: " + column + " Current columns: "
 					+ ArrayUtils.getInstance().makeStringList((ArrayList<String>) getColumns()));
 			try {
 				Query query = new Query(mysql, sql);
@@ -146,7 +137,7 @@ public class MySQL {
 
 	public void alterColumnType(final String column, final String newType) {
 		checkColumn(column, DataType.STRING);
-		plugin.debug("MYSQL QUERY: Altering column `" + column + "` to " + newType);
+		debug("Altering column `" + column + "` to " + newType);
 		if (newType.contains("INT")) {
 			try {
 				Query query = new Query(mysql, "UPDATE " + getName() + " SET `" + column
@@ -154,10 +145,6 @@ public class MySQL {
 				query.executeUpdateAsync();
 			} catch (SQLException e) {
 				e.printStackTrace();
-			}
-			if (!intColumns.contains(column)) {
-				intColumns.add(column);
-				plugin.getServerDataFile().setIntColumns(intColumns);
 			}
 		}
 		Query query;
@@ -181,29 +168,26 @@ public class MySQL {
 	}
 
 	public void clearCacheBasic() {
-		plugin.debug("Clearing cache basic");
+		debug("Clearing cache basic");
 		columns.clear();
 		columns.addAll(getColumnsQueury());
-		uuids.clear();
-		uuids.addAll(getUuidsQuery());
-		names.clear();
-		names.addAll(getNamesQuery());
+		servers.clear();
+		servers.addAll(getServersQuery());
 	}
 
 	public void close() {
 		mysql.disconnect();
 	}
 
-	public boolean containsKey(String uuid) {
-		if (uuids.contains(uuid) || containsKeyQuery(uuid)) {
+	public boolean containsKey(String server) {
+		if (servers.contains(server) || containsKeyQuery(server)) {
 			return true;
 		}
 		return false;
 	}
 
 	public boolean containsKeyQuery(String index) {
-		String sqlStr = "SELECT uuid FROM " + getName() + ";";
-		plugin.devDebug("MYSQL QUERY: " + sqlStr);
+		String sqlStr = "SELECT server FROM " + getName() + ";";
 		try (Connection conn = mysql.getConnectionManager().getConnection();
 				PreparedStatement sql = conn.prepareStatement(sqlStr)) {
 			ResultSet rs = sql.executeQuery();
@@ -211,7 +195,7 @@ public class MySQL {
 			 * Query query = new Query(mysql, sql); ResultSet rs = query.executeQuery();
 			 */
 			while (rs.next()) {
-				if (rs.getString("uuid").equals(index)) {
+				if (rs.getString("server").equals(index)) {
 					rs.close();
 					return true;
 				}
@@ -224,25 +208,22 @@ public class MySQL {
 		return false;
 	}
 
-	public boolean containsUUID(String uuid) {
-		if (uuids.contains(uuid)) {
+	public boolean containsServer(String server) {
+		if (servers.contains(server)) {
 			return true;
 		}
 		return false;
 	}
 
-	public void deletePlayer(String uuid) {
-		String q = "DELETE FROM " + getName() + " WHERE uuid='" + uuid + "';";
-		plugin.devDebug("MYSQL QUERY: " + q);
+	public void deleteServer(String server) {
+		String q = "DELETE FROM " + getName() + " WHERE server='" + server + "';";
 		try {
 			Query query = new Query(mysql, q);
 			query.executeUpdate();
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-		uuids.remove(uuid);
-		names.remove(PlayerUtils.getInstance()
-				.getPlayerName(plugin.getUserManager().getUser(java.util.UUID.fromString(uuid)), uuid));
+		servers.remove(server);
 		clearCacheBasic();
 
 	}
@@ -257,17 +238,27 @@ public class MySQL {
 	public ArrayList<String> getColumnsQueury() {
 		ArrayList<String> columns = new ArrayList<String>();
 		try (Connection conn = mysql.getConnectionManager().getConnection();
-				PreparedStatement sql = conn.prepareStatement("SHOW COLUMNS FROM `" + getName() + "`;")) {
-			plugin.devDebug("MYSQL QUERY: " + "SHOW COLUMNS FROM `" + getName() + "`;");
+				PreparedStatement sql = conn.prepareStatement("SELECT * FROM " + getName() + ";")) {
 			ResultSet rs = sql.executeQuery();
+			/*
+			 * Query query = new Query(mysql, "SELECT * FROM " + getName() + ";"); ResultSet
+			 * rs = query.executeQuery();
+			 */
 
-			while (rs.next()) {
-				String columnName = rs.getString(1);
-				columns.add(columnName);
+			ResultSetMetaData metadata = rs.getMetaData();
+			int columnCount = 0;
+			if (metadata != null) {
+				columnCount = metadata.getColumnCount();
 
+				for (int i = 1; i <= columnCount; i++) {
+					String columnName = metadata.getColumnName(i);
+					columns.add(columnName);
+				}
+				sql.close();
+				rs.close();
+				conn.close();
+				return columns;
 			}
-
-			plugin.devDebug("MYSQL QUERY: " + ArrayUtils.getInstance().makeStringList(columns));
 			rs.close();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -275,15 +266,14 @@ public class MySQL {
 		return columns;
 	}
 
-	public ArrayList<Column> getExact(String uuid) {
-		return getExactQuery(new Column("uuid", new DataValueString(uuid)));
+	public ArrayList<Column> getExact(String server) {
+		return getExactQuery(new Column("server", new DataValueString(server)));
 	}
 
 	public ArrayList<Column> getExactQuery(Column column) {
 		ArrayList<Column> result = new ArrayList<>();
 		String query = "SELECT * FROM " + getName() + " WHERE `" + column.getName() + "`='"
 				+ column.getValue().getString() + "';";
-		plugin.devDebug("MYSQL QUERY: " + query);
 
 		try (Connection conn = mysql.getConnectionManager().getConnection();
 				PreparedStatement sql = conn.prepareStatement(query)) {
@@ -294,22 +284,8 @@ public class MySQL {
 					String columnName = rs.getMetaData().getColumnLabel(i);
 					Column rCol = null;
 					if (intColumns.contains(columnName)) {
-						try {
-							rCol = new Column(columnName, DataType.INTEGER);
-							rCol.setValue(new DataValueInt(rs.getInt(i)));
-						} catch (Exception e) {
-							rCol = new Column(columnName, DataType.INTEGER);
-							String data = rs.getString(i);
-							if (data != null) {
-								try {
-									rCol.setValue(new DataValueInt(Integer.parseInt(data)));
-								} catch (NumberFormatException ex) {
-									rCol.setValue(new DataValueInt(0));
-								}
-							} else {
-								rCol.setValue(new DataValueInt(0));
-							}
-						}
+						rCol = new Column(columnName, DataType.INTEGER);
+						rCol.setValue(new DataValueInt(rs.getInt(i)));
 					} else {
 						rCol = new Column(columnName, DataType.STRING);
 						rCol.setValue(new DataValueString(rs.getString(i)));
@@ -335,130 +311,9 @@ public class MySQL {
 		return name;
 	}
 
-	public Set<String> getNames() {
-		if (names == null || names.size() == 0) {
-			names.clear();
-			names.addAll(getNamesQuery());
-			return names;
-		}
-		return names;
-	}
-
-	public String getUUID(String playerName) {
-		String query = "SELECT uuid FROM " + getName() + " WHERE " + "PlayerName" + "='" + playerName + "';";
-		plugin.devDebug("MYSQL QUERY: " + query);
-		try (Connection conn = mysql.getConnectionManager().getConnection();
-				PreparedStatement sql = conn.prepareStatement(query)) {
-			ResultSet rs = sql.executeQuery();
-			/*
-			 * Query sql = new Query(mysql, query); ResultSet rs = sql.executeQuery();
-			 */
-			if (rs.next()) {
-				String uuid = rs.getString("uuid");
-				if (uuid != null && !uuid.isEmpty()) {
-					rs.close();
-					return uuid;
-				}
-			}
-			rs.close();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		} catch (ArrayIndexOutOfBoundsException e) {
-		}
-		return null;
-	}
-
-	public ConcurrentHashMap<UUID, String> getRowsUUIDNameQuery() {
-		ConcurrentHashMap<UUID, String> uuidNames = new ConcurrentHashMap<UUID, String>();
-		String sqlStr = "SELECT UUID, PlayerName FROM " + getName() + ";";
-		plugin.devDebug("MYSQL QUERY: " + sqlStr);
-		try (Connection conn = mysql.getConnectionManager().getConnection();
-				PreparedStatement sql = conn.prepareStatement(sqlStr)) {
-			ResultSet rs = sql.executeQuery();
-			/*
-			 * Query query = new Query(mysql, sql); ResultSet rs = query.executeQuery();
-			 */
-
-			while (rs.next()) {
-				String uuid = rs.getString("uuid");
-				String playerName = rs.getString("PlayerName");
-				if (uuid != null && !uuid.isEmpty() && !uuid.equals("null") && playerName != null
-						&& !playerName.isEmpty()) {
-					uuidNames.put(UUID.fromString(uuid), playerName);
-				}
-			}
-			sql.close();
-			conn.close();
-		} catch (SQLException e) {
-		}
-
-		return uuidNames;
-	}
-
-	public ArrayList<String> getNamesQuery() {
-		ArrayList<String> uuids = new ArrayList<String>();
-
-		checkColumn("PlayerName", DataType.STRING);
-		ArrayList<Column> rows = getRowsNameQuery();
-		if (rows != null) {
-			for (Column c : rows) {
-				if (c.getValue() != null && c.getValue().isString()) {
-					String value = c.getValue().getString();
-					if (value != null) {
-						uuids.add(value);
-					}
-				}
-			}
-		}
-
-		return uuids;
-	}
-
-	public ArrayList<Column> getRowsNameQuery() {
-		ArrayList<Column> result = new ArrayList<Column>();
-		String sqlStr = "SELECT PlayerName FROM " + getName() + ";";
-		plugin.devDebug("MYSQL QUERY: " + sqlStr);
-
-		try (Connection conn = mysql.getConnectionManager().getConnection();
-				PreparedStatement sql = conn.prepareStatement(sqlStr)) {
-			ResultSet rs = sql.executeQuery();
-
-			while (rs.next()) {
-				Column rCol = new Column("PlayerName", new DataValueString(rs.getString("PlayerName")));
-				result.add(rCol);
-			}
-			rs.close();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-
-		return result;
-	}
-
-	public ArrayList<Integer> getNumbersInColumn(String column) {
-		ArrayList<Integer> result = new ArrayList<Integer>();
-		String sqlStr = "SELECT " + column + " FROM " + getName() + ";";
-		plugin.devDebug("MYSQL QUERY: " + sqlStr);
-
-		try (Connection conn = mysql.getConnectionManager().getConnection();
-				PreparedStatement sql = conn.prepareStatement(sqlStr)) {
-			ResultSet rs = sql.executeQuery();
-
-			while (rs.next()) {
-				result.add(rs.getInt(column));
-			}
-			rs.close();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-
-		return result;
-	}
-
 	public ArrayList<Column> getRowsQuery() {
 		ArrayList<Column> result = new ArrayList<Column>();
-		String sqlStr = "SELECT uuid FROM " + getName() + ";";
-		plugin.devDebug("MYSQL QUERY: " + sqlStr);
+		String sqlStr = "SELECT server FROM " + getName() + ";";
 
 		try (Connection conn = mysql.getConnectionManager().getConnection();
 				PreparedStatement sql = conn.prepareStatement(sqlStr)) {
@@ -466,7 +321,7 @@ public class MySQL {
 			ResultSet rs = sql.executeQuery();
 
 			while (rs.next()) {
-				Column rCol = new Column("uuid", new DataValueString(rs.getString("uuid")));
+				Column rCol = new Column("server", new DataValueString(rs.getString("server")));
 				result.add(rCol);
 			}
 			rs.close();
@@ -478,16 +333,16 @@ public class MySQL {
 		return result;
 	}
 
-	public Set<String> getUuids() {
-		if (uuids == null || uuids.size() == 0) {
-			uuids.clear();
-			uuids.addAll(getUuidsQuery());
-			return uuids;
+	public Set<String> getServers() {
+		if (servers == null || servers.size() == 0) {
+			servers.clear();
+			servers.addAll(getServersQuery());
+			return servers;
 		}
-		return uuids;
+		return servers;
 	}
 
-	public ArrayList<String> getUuidsQuery() {
+	public ArrayList<String> getServersQuery() {
 		ArrayList<String> uuids = new ArrayList<String>();
 
 		ArrayList<Column> rows = getRowsQuery();
@@ -498,7 +353,7 @@ public class MySQL {
 				}
 			}
 		} else {
-			plugin.getLogger().severe("Failed to fetch uuids");
+			severe("Failed to fetch servers");
 		}
 
 		return uuids;
@@ -512,7 +367,7 @@ public class MySQL {
 	public void insertQuery(String index, List<Column> cols) {
 		String query = "INSERT IGNORE " + getName() + " ";
 
-		query += "set uuid='" + index + "', ";
+		query += "set server='" + index + "', ";
 
 		for (int i = 0; i < cols.size(); i++) {
 			Column col = cols.get(i);
@@ -535,27 +390,13 @@ public class MySQL {
 			}
 		}
 
-		plugin.devDebug("MYSQL QUERY: " + query);
-
 		try {
 			new Query(mysql, query).executeUpdate();
-			String playerName = "";
-			for (Column col : cols) {
-				if (col.getName().equalsIgnoreCase("playername")) {
-					playerName = col.getValue().toString();
-				}
-			}
-			if (playerName == null || playerName.isEmpty()) {
-				names.add(PlayerUtils.getInstance().getPlayerName(
-						plugin.getUserManager().getUser(java.util.UUID.fromString(index), false), index));
-			} else {
-				names.add(playerName);
-			}
-			uuids.add(index);
-			plugin.devDebug("Inserting " + index + " into database");
+			servers.add(index);
+			debug("Inserting " + index + " into database");
 		} catch (Exception e) {
 			e.printStackTrace();
-			plugin.debug("Failed to insert player " + index);
+			debug("Failed to insert server " + index);
 		}
 
 	}
@@ -583,7 +424,7 @@ public class MySQL {
 			checkColumn(col.getName(), col.getDataType());
 		}
 		synchronized (object2) {
-			if (getUuids().contains(index) || containsKeyQuery(index)) {
+			if (getServers().contains(index) || containsKeyQuery(index)) {
 
 				String query = "UPDATE " + getName() + " SET ";
 
@@ -607,10 +448,10 @@ public class MySQL {
 						}
 					}
 				}
-				query += " WHERE uuid=";
+				query += " WHERE server=";
 				query += "'" + index + "';";
 
-				plugin.devDebug("MYSQL QUERY: " + query);
+				debug("Batch query: " + query);
 
 				try {
 					Query q = new Query(mysql, query);
@@ -630,12 +471,12 @@ public class MySQL {
 
 	public void update(String index, String column, DataValue value) {
 		if (value == null) {
-			plugin.extraDebug("Mysql value null: " + column);
+			debug("Mysql value null: " + column);
 			return;
 		}
 		checkColumn(column, value.getType());
 		synchronized (object2) {
-			if (getUuids().contains(index) || containsKeyQuery(index)) {
+			if (getServers().contains(index) || containsKeyQuery(index)) {
 				String query = "UPDATE " + getName() + " SET ";
 
 				if (value.isString()) {
@@ -645,10 +486,9 @@ public class MySQL {
 				} else if (value.isInt()) {
 					query += column + "='" + value.getInt() + "'";
 				}
-				query += " WHERE uuid=";
+				query += " WHERE server=";
 				query += "'" + index + "';";
 
-				plugin.devDebug("MYSQL QUERY: " + query);
 				try {
 					Query q = new Query(mysql, query);
 					q.executeUpdate();
@@ -666,7 +506,6 @@ public class MySQL {
 	public void wipeColumnData(String columnName) {
 		checkColumn(columnName, DataType.STRING);
 		String sql = "UPDATE " + getName() + " SET " + columnName + " = NULL;";
-		plugin.devDebug("MYSQL QUERY: " + sql);
 		try {
 			Query query = new Query(mysql, sql);
 			query.executeUpdate();
@@ -674,38 +513,12 @@ public class MySQL {
 			e.printStackTrace();
 		}
 
-	}
-	
-	public void copyColumnData(String columnFromName, String columnToName) {
-		checkColumn(columnFromName, DataType.STRING);
-		checkColumn(columnToName, DataType.STRING);
-		String sql = "UPDATE `" + getName() + "` SET `" + columnToName + "` = `"+ columnFromName + "`;";
-		plugin.devDebug("MYSQL QUERY: " + sql);
-		try {
-			Query query = new Query(mysql, sql);
-			query.executeUpdate();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
 	}
 
 	public void executeQuery(String str) {
 		try {
 			Query q = new Query(mysql, StringParser.getInstance().replacePlaceHolder(str, "tablename", getName()));
-			plugin.devDebug("MYSQL QUERY: " + str);
 			q.executeUpdate();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-	}
-
-	public void executeQueryReturn(String str) {
-		try (Connection conn = mysql.getConnectionManager().getConnection();
-				PreparedStatement sql = conn.prepareStatement(str)) {
-			plugin.devDebug("MYSQL QUERY: " + str);
-			ResultSet rs = sql.executeQuery();
-
-			rs.close();
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}

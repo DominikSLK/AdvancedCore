@@ -3,7 +3,6 @@ package com.bencodez.advancedcore.bungeeapi.mysql;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,8 +18,11 @@ import com.bencodez.advancedcore.api.user.usercache.value.DataValueInt;
 import com.bencodez.advancedcore.api.user.usercache.value.DataValueString;
 import com.bencodez.advancedcore.api.user.userstorage.Column;
 import com.bencodez.advancedcore.api.user.userstorage.DataType;
+import com.bencodez.advancedcore.api.user.userstorage.mysql.api.config.MysqlConfigVelocity;
 import com.bencodez.advancedcore.api.user.userstorage.mysql.api.queries.Query;
 import com.bencodez.advancedcore.bungeeapi.velocity.VelocityYMLFile;
+
+import lombok.Getter;
 
 public abstract class VelocityMySQL {
 	private List<String> columns = Collections.synchronizedList(new ArrayList<String>());
@@ -32,6 +34,7 @@ public abstract class VelocityMySQL {
 	// ConcurrentMap<String, ArrayList<Column>> table = new
 	// ConcurrentHashMap<String, ArrayList<Column>>();
 
+	@Getter
 	private com.bencodez.advancedcore.api.user.userstorage.mysql.api.MySQL mysql;
 
 	private String name;
@@ -44,31 +47,17 @@ public abstract class VelocityMySQL {
 
 	private Set<String> uuids = Collections.synchronizedSet(new HashSet<String>());
 
-	public VelocityMySQL(String tableName, VelocityYMLFile config) {
-		String tablePrefix = config.getString(config.getNode("Prefix"), "");
-		String hostName = config.getString(config.getNode("Host"), "");
-		int port = config.getInt(config.getNode("Port"), 0);
-		String user = config.getString(config.getNode("Username"), "");
-		String pass = config.getString(config.getNode("Password"), "");
-		String database = config.getString(config.getNode("Database"), "");
-		long lifeTime = config.getLong(config.getNode("MaxLifeTime"), -1);
-		int maxThreads = config.getInt(config.getNode("MaxConnections"), 1);
-		String str = config.getString(config.getNode("Line"), "");
-		if (maxThreads < 1) {
-			maxThreads = 1;
-		}
-		boolean useSSL = config.getBoolean(config.getNode("UseSSL"), false);
-		boolean publicKeyRetrieval = config.getBoolean(config.getNode("PublicKeyRetrieval"), false);
-		boolean useMariaDB = config.getBoolean(config.getNode("UseMariaDB"), false);
-		name = config.getString(config.getNode("Name"), "");
-		if (!name.isEmpty()) {
-			name = tableName;
-		}
+	public VelocityMySQL(String tableName, VelocityYMLFile section) {
+		MysqlConfigVelocity config = new MysqlConfigVelocity(section);
 
-		if (tablePrefix != null) {
-			name = tablePrefix + tableName;
+		if (config.hasTableNameSet()) {
+			tableName = config.getTableName();
 		}
-		mysql = new com.bencodez.advancedcore.api.user.userstorage.mysql.api.MySQL(maxThreads) {
+		name = tableName;
+		if (config.getTablePrefix() != null) {
+			name = config.getTablePrefix() + tableName;
+		}
+		mysql = new com.bencodez.advancedcore.api.user.userstorage.mysql.api.MySQL(config.getMaxThreads()) {
 
 			@Override
 			public void debug(SQLException e) {
@@ -80,15 +69,15 @@ public abstract class VelocityMySQL {
 				severe(string);
 			}
 		};
-		if (!mysql.connect(hostName, "" + port, user, pass, database, useSSL, lifeTime, str, publicKeyRetrieval,
-				useMariaDB)) {
+
+		if (!mysql.connect(config)) {
 
 		}
 		try {
-			Query q = new Query(mysql, "USE `" + database + "`;");
+			Query q = new Query(mysql, "USE `" + config.getDatabase() + "`;");
 			q.executeUpdateAsync();
 		} catch (SQLException e) {
-			severe("Failed to send use database query: " + database + " Error: " + e.getMessage());
+			severe("Failed to send use database query: " + config.getDatabase() + " Error: " + e.getMessage());
 			debug(e);
 		}
 		String sql = "CREATE TABLE IF NOT EXISTS " + getName() + " (";
@@ -159,6 +148,18 @@ public abstract class VelocityMySQL {
 		}
 	}
 
+	public void wipeColumnData(String columnName) {
+		checkColumn(columnName, DataType.STRING);
+		String sql = "UPDATE " + getName() + " SET " + columnName + " = NULL;";
+		try {
+			Query query = new Query(mysql, sql);
+			query.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+
+	}
+
 	public void clearCache() {
 		clearCacheBasic();
 	}
@@ -207,31 +208,32 @@ public abstract class VelocityMySQL {
 	public ArrayList<String> getColumnsQueury() {
 		ArrayList<String> columns = new ArrayList<String>();
 		try (Connection conn = mysql.getConnectionManager().getConnection();
-				PreparedStatement sql = conn.prepareStatement("SELECT * FROM " + getName() + ";")) {
+				PreparedStatement sql = conn.prepareStatement("SHOW COLUMNS FROM `" + getName() + "`;")) {
 			ResultSet rs = sql.executeQuery();
-			/*
-			 * Query query = new Query(mysql, "SELECT * FROM " + getName() + ";"); ResultSet
-			 * rs = query.executeQuery();
-			 */
 
-			ResultSetMetaData metadata = rs.getMetaData();
-			int columnCount = 0;
-			if (metadata != null) {
-				columnCount = metadata.getColumnCount();
+			while (rs.next()) {
+				String columnName = rs.getString(1);
+				columns.add(columnName);
 
-				for (int i = 1; i <= columnCount; i++) {
-					String columnName = metadata.getColumnName(i);
-					columns.add(columnName);
-				}
-				rs.close();
-				return columns;
 			}
+
 			rs.close();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 		return columns;
+	}
 
+	public void copyColumnData(String columnFromName, String columnToName) {
+		checkColumn(columnFromName, DataType.STRING);
+		checkColumn(columnToName, DataType.STRING);
+		String sql = "UPDATE `" + getName() + "` SET `" + columnToName + "` = `" + columnFromName + "`;";
+		try {
+			Query query = new Query(mysql, sql);
+			query.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
 	}
 
 	public ConcurrentHashMap<UUID, String> getRowsUUIDNameQuery() {

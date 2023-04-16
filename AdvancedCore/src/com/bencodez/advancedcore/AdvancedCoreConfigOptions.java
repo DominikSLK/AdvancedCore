@@ -18,9 +18,6 @@ public class AdvancedCoreConfigOptions {
 
 	@Getter
 	@Setter
-	private boolean autoKillInvs = true;
-	@Getter
-	@Setter
 	private double clickSoundPitch = 1;
 	@Getter
 	@Setter
@@ -93,6 +90,10 @@ public class AdvancedCoreConfigOptions {
 	@Getter
 	@Setter
 	private boolean geyserPrefixSupport = false;
+
+	@Getter
+	@Setter
+	private boolean onlineMode = true;
 
 	@Getter
 	@Setter
@@ -223,7 +224,6 @@ public class AdvancedCoreConfigOptions {
 			helpLine = configData.getString("Format.HelpLine", "&6%Command% - &6%HelpMessage%");
 			logDebugToFile = configData.getBoolean("LogDebugToFile", false);
 			sendScoreboards = configData.getBoolean("SendScoreboards", true);
-			autoKillInvs = configData.getBoolean("AutoKillInvs", true);
 			prevItem = configData.getConfigurationSection("Format.PrevItem");
 			nextItem = configData.getConfigurationSection("Format.NextItem");
 			formatRewardTimeFormat = configData.getString("Format.RewardTimeFormat", "EEE, d MMM yyyy HH:mm");
@@ -278,6 +278,8 @@ public class AdvancedCoreConfigOptions {
 			geyserPrefixSupport = configData.getBoolean("GeyserPrefixSupport", false);
 			geyserPrefix = configData.getString("GeyserPrefix", "*");
 			delayLoginEvent = configData.getInt("DelayLoginEvent", 0);
+
+			onlineMode = configData.getBoolean("OnlineMode", true);
 		}
 	}
 }

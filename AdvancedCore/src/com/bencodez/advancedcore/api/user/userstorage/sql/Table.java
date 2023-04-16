@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.bencodez.advancedcore.AdvancedCorePlugin;
+import com.bencodez.advancedcore.api.messages.StringParser;
 import com.bencodez.advancedcore.api.user.usercache.keys.UserDataKey;
 import com.bencodez.advancedcore.api.user.usercache.keys.UserDataKeyInt;
 import com.bencodez.advancedcore.api.user.usercache.value.DataValueBoolean;
@@ -351,6 +352,29 @@ public class Table {
 		return result;
 	}
 
+	public String getUUID(String playerName) {
+		String query = "SELECT uuid FROM " + getName() + " WHERE " + "PlayerName" + "='" + playerName + "';";
+
+		try (PreparedStatement sql = sqLite.getSQLConnection().prepareStatement(query)) {
+			ResultSet rs = sql.executeQuery();
+			/*
+			 * Query sql = new Query(mysql, query); ResultSet rs = sql.executeQuery();
+			 */
+			if (rs.next()) {
+				String uuid = rs.getString("uuid");
+				if (uuid != null && !uuid.isEmpty()) {
+					rs.close();
+					return uuid;
+				}
+			}
+			rs.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} catch (ArrayIndexOutOfBoundsException e) {
+		}
+		return null;
+	}
+
 	public ArrayList<String> getTableColumns() {
 		ArrayList<String> columns = new ArrayList<String>();
 		String query = "SELECT * FROM " + getName();
@@ -533,7 +557,28 @@ public class Table {
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
+	}
 
+	public void copyColumnData(String columnFromName, String columnToName) {
+		checkColumn(new Column(columnToName, DataType.STRING));
+		checkColumn(new Column(columnFromName, DataType.STRING));
+		String sql = "UPDATE `" + getName() + "` SET `" + columnToName + "` = `" + columnFromName + "`;";
+		try {
+			PreparedStatement s = sqLite.getSQLConnection().prepareStatement(sql);
+			s.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public void executeQuery(String str) {
+		try {
+			PreparedStatement s = sqLite.getSQLConnection()
+					.prepareStatement(StringParser.getInstance().replacePlaceHolder(str, "tablename", getName()));
+			s.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
 	}
 
 }

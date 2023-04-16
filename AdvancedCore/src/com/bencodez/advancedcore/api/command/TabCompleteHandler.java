@@ -3,6 +3,7 @@ package com.bencodez.advancedcore.api.command;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 
 import org.bukkit.command.CommandSender;
 
@@ -62,7 +63,6 @@ public class TabCompleteHandler {
 	}
 
 	public ConcurrentHashMap<String, ArrayList<String>> getTabCompleteOptions() {
-		loadTabCompleteOptions();
 		return tabCompleteOptions;
 	}
 
@@ -78,6 +78,29 @@ public class TabCompleteHandler {
 
 	public ArrayList<String> getTabCompleteReplaces() {
 		return tabCompleteReplaces;
+	}
+
+	public void loadTimer() {
+		plugin.getTimer().scheduleWithFixedDelay(new Runnable() {
+
+			@Override
+			public void run() {
+				loadTabCompleteOptions();
+
+			}
+		}, 5, 30, TimeUnit.MINUTES);
+	}
+
+	public void onLogin() {
+		for (TabCompleteHandle h : tabCompletes) {
+			if (h.isUpdateOnLoginLogout()) {
+				h.updateReplacements();
+			}
+		}
+		tabCompleteOptions.clear();
+		for (TabCompleteHandle h : tabCompletes) {
+			tabCompleteOptions.put(h.getToReplace(), h.getReplace());
+		}
 	}
 
 	public void loadTabCompleteOptions() {
