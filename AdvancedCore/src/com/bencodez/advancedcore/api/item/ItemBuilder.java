@@ -77,14 +77,27 @@ public class ItemBuilder {
 	@Getter
 	private String path;
 
+	@Getter
+	private String identifier;
+
 	private HashMap<String, String> placeholders = new HashMap<String, String>();
 
 	private String skull = "";
 
+	@Getter
 	private int slot = -1;
 
 	@Getter
+	private boolean fillEmptySlots = false;
+
+	@Getter
 	private boolean validMaterial = true;
+
+	@Getter
+	private boolean closeGUISet = false;
+
+	@Getter
+	private boolean closeGUI = true;
 
 	/**
 	 * Create ItemBuilder from a ConfigurationSection
@@ -104,6 +117,7 @@ public class ItemBuilder {
 			setBlank();
 		} else {
 			path = data.getCurrentPath();
+			identifier = data.getName();
 			double chance = data.getDouble("Chance", 100);
 			if (checkChance(chance)) {
 				chancePass = true;
@@ -114,6 +128,19 @@ public class ItemBuilder {
 					conditional = true;
 					conditionalValues = data.getConfigurationSection("Conditional");
 					is = new ItemStack(Material.STONE);
+
+					slot = data.getInt("Slot", -1);
+
+					fillSlots = data.getIntegerList("FillSlots");
+
+					fillEmptySlots = data.getBoolean("FillEmptySlots");
+
+					if (data.isBoolean("CloseGUI")) {
+						closeGUISet = true;
+						closeGUI = data.getBoolean("CloseGUI", true);
+					} else {
+						closeGUISet = false;
+					}
 
 				} else {
 
@@ -262,6 +289,15 @@ public class ItemBuilder {
 					slot = data.getInt("Slot", -1);
 
 					fillSlots = data.getIntegerList("FillSlots");
+
+					fillEmptySlots = data.getBoolean("FillEmptySlots");
+
+					if (data.isBoolean("CloseGUI")) {
+						closeGUISet = true;
+						closeGUI = data.getBoolean("CloseGUI", true);
+					} else {
+						closeGUISet = false;
+					}
 				}
 
 			} else {
@@ -687,13 +723,6 @@ public class ItemBuilder {
 		return null;
 	}
 
-	/**
-	 * @return the slot
-	 */
-	public int getSlot() {
-		return slot;
-	}
-
 	public Material getType() {
 		return is.getType();
 	}
@@ -814,7 +843,15 @@ public class ItemBuilder {
 			}
 		}
 		return null;
+	}
 
+	public String getRewardsPath(Player player) {
+		if (conditional) {
+			JavascriptEngine engine = new JavascriptEngine().addPlayer(player);
+			String value = engine.getStringValue(javascriptConditional);
+			return identifier + ".Conditional." + value + ".Rewards";
+		}
+		return "Rewards";
 	}
 
 	public ItemBuilder setCustomData(String key, String value) {
@@ -1039,12 +1076,16 @@ public class ItemBuilder {
 		return is;
 	}
 
+	public ItemBuilder getConditionItemBuilder(OfflinePlayer player) {
+		return setConditional(new JavascriptEngine().addPlayer(player));
+	}
+
 	public ItemStack toItemStack(OfflinePlayer player) {
 		if (!placeholders.containsKey("player")) {
 			placeholders.put("player", player.getName());
 		}
 		if (conditional) {
-			return setConditional(new JavascriptEngine().addPlayer(player)).toItemStack(player);
+			return getConditionItemBuilder(player).toItemStack(player);
 		}
 		if (checkLoreLength) {
 			checkLoreLength();

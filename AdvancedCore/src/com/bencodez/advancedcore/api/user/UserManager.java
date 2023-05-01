@@ -38,6 +38,7 @@ public class UserManager {
 		load();
 	}
 
+	@SuppressWarnings("deprecation")
 	public ArrayList<String> getAllPlayerNames() {
 		if (plugin.isLoadUserData()) {
 			ArrayList<String> names = new ArrayList<String>();
@@ -74,6 +75,7 @@ public class UserManager {
 		return ArrayUtils.getInstance().removeDuplicates(getAllUUIDs(plugin.getStorageType()));
 	}
 
+	@SuppressWarnings("deprecation")
 	public ArrayList<String> getAllUUIDs(UserStorage storage) {
 		if (plugin.isLoadUserData()) {
 			if (storage.equals(UserStorage.FLAT)) {
@@ -286,6 +288,7 @@ public class UserManager {
 		return false;
 	}
 
+	@SuppressWarnings("deprecation")
 	public void copyColumnData(String columnFromName, String columnToName) {
 		if (plugin.getStorageType().equals(UserStorage.MYSQL)) {
 			plugin.getMysql().copyColumnData(columnFromName, columnToName);
@@ -315,5 +318,14 @@ public class UserManager {
 		for (UserDataChanged change : userDataChange) {
 			change.onChange(user, keys);
 		}
+	}
+
+	public ArrayList<Integer> getNumbersInColumn(String columnName) {
+		if (plugin.getStorageType().equals(UserStorage.MYSQL)) {
+			return plugin.getMysql().getNumbersInColumn(columnName);
+		} else if (plugin.getStorageType().equals(UserStorage.SQLITE)) {
+			return plugin.getSQLiteUserTable().getNumbersInColumn(columnName);
+		}
+		return new ArrayList<Integer>();
 	}
 }

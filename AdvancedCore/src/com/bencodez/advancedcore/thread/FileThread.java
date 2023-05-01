@@ -19,6 +19,7 @@ public class FileThread {
 	 */
 	public class ReadThread extends java.lang.Thread {
 
+		@Deprecated
 		public void deletePlayerFile(String uuid) {
 			synchronized (FileThread.getInstance()) {
 				try {
@@ -34,6 +35,7 @@ public class FileThread {
 			}
 		}
 
+		@Deprecated
 		public FileConfiguration getData(UserData userData, String uuid) {
 			synchronized (FileThread.getInstance()) {
 				try {
@@ -52,6 +54,7 @@ public class FileThread {
 
 		}
 
+		@Deprecated
 		public File getPlayerFile(String uuid) {
 			synchronized (FileThread.getInstance()) {
 				try {
@@ -71,6 +74,7 @@ public class FileThread {
 			}
 		}
 
+		@Deprecated
 		public boolean hasPlayerFile(String uuid) {
 			synchronized (FileThread.getInstance()) {
 				try {
@@ -83,6 +87,23 @@ public class FileThread {
 				}
 				return false;
 			}
+		}
+
+		@Deprecated
+		public void setData(UserData userData, final String uuid, final String path, final Object value) {
+			synchronized (FileThread.getInstance()) {
+				try {
+					File dFile = getPlayerFile(uuid);
+					FileConfiguration data = getData(userData, uuid);
+					data.set(path, value);
+					data.save(dFile);
+				} catch (Exception e) {
+					AdvancedCorePlugin.getInstance().getLogger().warning(
+							"Failed to set a value for " + uuid + ".yml, turn debug on to see full stacktraces");
+					AdvancedCorePlugin.getInstance().debug(e);
+				}
+			}
+
 		}
 
 		@Override
@@ -105,22 +126,6 @@ public class FileThread {
 		public void run(Runnable run) {
 			synchronized (FileThread.getInstance()) {
 				run.run();
-			}
-
-		}
-
-		public void setData(UserData userData, final String uuid, final String path, final Object value) {
-			synchronized (FileThread.getInstance()) {
-				try {
-					File dFile = getPlayerFile(uuid);
-					FileConfiguration data = getData(userData, uuid);
-					data.set(path, value);
-					data.save(dFile);
-				} catch (Exception e) {
-					AdvancedCorePlugin.getInstance().getLogger().warning(
-							"Failed to set a value for " + uuid + ".yml, turn debug on to see full stacktraces");
-					AdvancedCorePlugin.getInstance().debug(e);
-				}
 			}
 
 		}

@@ -34,6 +34,11 @@ public class UserData {
 		tempCache = null;
 	}
 
+	@Deprecated
+	public FileConfiguration getData(String uuid) {
+		return FileThread.getInstance().getThread().getData(this, uuid);
+	}
+
 	public HashMap<String, DataValue> convert(List<Column> cols) {
 		HashMap<String, DataValue> data = new HashMap<String, DataValue>();
 		if (cols != null) {
@@ -51,10 +56,6 @@ public class UserData {
 
 	public boolean getBoolean(String key, boolean useCache, boolean waitForCache) {
 		return Boolean.valueOf(getString(key, useCache, waitForCache));
-	}
-
-	public FileConfiguration getData(String uuid) {
-		return FileThread.getInstance().getThread().getData(this, uuid);
 	}
 
 	@Deprecated
@@ -78,6 +79,7 @@ public class UserData {
 		return getInt(user.getPlugin().getStorageType(), key, def, useCache, waitForCache);
 	}
 
+	@SuppressWarnings("deprecation")
 	public int getInt(UserStorage storage, String key, int def, boolean useCache, boolean waitForCache) {
 		if (!key.equals("")) {
 			if (user.isTempCache() && tempCache != null) {
@@ -159,12 +161,11 @@ public class UserData {
 						}
 					}
 				}
-			} else if (storage.equals(UserStorage.FLAT)) {
-				try {
-					return getData(user.getUUID()).getInt(key, def);
-				} catch (Exception e) {
-
-				}
+			}
+		} else if (storage.equals(UserStorage.FLAT)) {
+			try {
+				return getData(user.getUUID()).getInt(key, def);
+			} catch (Exception e) {
 
 			}
 
@@ -182,6 +183,7 @@ public class UserData {
 		return getKeys(true);
 	}
 
+	@SuppressWarnings("deprecation")
 	public ArrayList<String> getKeys(boolean waitForCache) {
 		ArrayList<String> keys = new ArrayList<String>();
 		if (user.getPlugin().getStorageType().equals(UserStorage.FLAT)) {
@@ -205,6 +207,7 @@ public class UserData {
 		return keys;
 	}
 
+	@SuppressWarnings("deprecation")
 	public ArrayList<String> getKeys(UserStorage storage, boolean waitForCache) {
 		ArrayList<String> keys = new ArrayList<String>();
 		if (storage.equals(UserStorage.FLAT)) {
@@ -249,6 +252,7 @@ public class UserData {
 		return getString(user.getPlugin().getStorageType(), key, useCache, waitForCache);
 	}
 
+	@SuppressWarnings("deprecation")
 	public String getString(UserStorage storage, String key, boolean useCache, boolean waitForCache) {
 		if (!key.equals("")) {
 			if (user.isTempCache() && tempCache != null) {
@@ -356,6 +360,7 @@ public class UserData {
 		return getValues(user.getPlugin().getStorageType());
 	}
 
+	@SuppressWarnings("deprecation")
 	public HashMap<String, DataValue> getValues(UserStorage storage) {
 		if (storage.equals(UserStorage.MYSQL)) {
 			return convert(getMySqlRow());
@@ -372,29 +377,35 @@ public class UserData {
 				}
 			}
 			return list;
-
 		}
 		return null;
 	}
 
+	@SuppressWarnings("deprecation")
 	public boolean hasData() {
 		if (user.getPlugin().getStorageType().equals(UserStorage.MYSQL)) {
 			return user.getPlugin().getMysql().containsKey(user.getUUID());
-		} else if (user.getPlugin().getStorageType().equals(UserStorage.FLAT)) {
-			return FileThread.getInstance().getThread().hasPlayerFile(user.getUUID());
 		} else if (user.getPlugin().getStorageType().equals(UserStorage.SQLITE)) {
 			return user.getPlugin().getSQLiteUserTable().containsKey(user.getUUID());
+		} else if (user.getPlugin().getStorageType().equals(UserStorage.FLAT)) {
+			return FileThread.getInstance().getThread().hasPlayerFile(user.getUUID());
 		}
 		return false;
 	}
 
+	@Deprecated
+	private void setData(final String uuid, final String path, final Object value) {
+		FileThread.getInstance().getThread().setData(this, uuid, path, value);
+	}
+
+	@SuppressWarnings("deprecation")
 	public void remove() {
 		if (user.getPlugin().getStorageType().equals(UserStorage.MYSQL)) {
 			user.getPlugin().getMysql().deletePlayer(user.getUUID());
-		} else if (user.getPlugin().getStorageType().equals(UserStorage.FLAT)) {
-			FileThread.getInstance().getThread().deletePlayerFile(user.getUUID());
 		} else if (user.getPlugin().getStorageType().equals(UserStorage.SQLITE)) {
 			user.getPlugin().getSQLiteUserTable().delete(new Column("uuid", new DataValueString(user.getUUID())));
+		} else if (user.getPlugin().getStorageType().equals(UserStorage.FLAT)) {
+			FileThread.getInstance().getThread().deletePlayerFile(user.getUUID());
 		}
 		user.clearCache();
 	}
@@ -407,10 +418,6 @@ public class UserData {
 		setString(key, "" + value, queue);
 	}
 
-	private void setData(final String uuid, final String path, final Object value) {
-		FileThread.getInstance().getThread().setData(this, uuid, path, value);
-	}
-
 	public void setInt(final String key, final int value) {
 		setInt(key, value, true);
 	}
@@ -419,6 +426,7 @@ public class UserData {
 		setInt(user.getPlugin().getStorageType(), key, value, queue);
 	}
 
+	@SuppressWarnings("deprecation")
 	public void setInt(UserStorage storage, final String key, final int value, boolean queue) {
 		if (key.equals("")) {
 			user.getPlugin().debug("No key: " + key + " to " + value);
@@ -463,6 +471,7 @@ public class UserData {
 		setString(user.getPlugin().getStorageType(), key, value, queue);
 	}
 
+	@SuppressWarnings("deprecation")
 	public void setString(UserStorage storage, final String key, final String value, boolean queue) {
 		if (key.equals("") && value != null) {
 			user.getPlugin().debug("No key/value: " + key + " to " + value);
@@ -525,6 +534,7 @@ public class UserData {
 		setValues(user.getPlugin().getStorageType(), values);
 	}
 
+	@SuppressWarnings("deprecation")
 	public void setValues(UserStorage storage, HashMap<String, DataValue> values) {
 		if (storage.equals(UserStorage.MYSQL)) {
 			if (user.getPlugin().getMysql() != null) {

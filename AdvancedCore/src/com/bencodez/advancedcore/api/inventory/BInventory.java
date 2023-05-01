@@ -183,6 +183,8 @@ public class BInventory {
 		setInventoryName(name);
 	}
 
+	private ArrayList<BInventoryButton> fillItems = new ArrayList<BInventoryButton>();
+
 	/**
 	 * Adds the button.
 	 *
@@ -198,24 +200,55 @@ public class BInventory {
 		if (slot == -2) {
 			slot = getProperSize(getNextSlot()) - 1;
 		}
-		if (button.getFillSlots() != null && button.getFillSlots().size() > 0) {
-			for (Integer fill : button.getFillSlots()) {
-				slot = fill.intValue();
-				BInventoryButton button1 = new BInventoryButton(button) {
+		if (!button.isFillEmptySlots()) {
+			if (button.getFillSlots() != null && button.getFillSlots().size() > 0) {
+				for (Integer fill : button.getFillSlots()) {
+					slot = fill.intValue();
+					BInventoryButton button1 = new BInventoryButton(button) {
 
-					@Override
-					public void onClick(ClickEvent clickEvent) {
-						button.onClick(clickEvent);
-					}
-				};
-				button1.setSlot(slot);
-				getButtons().put(slot, button1);
+						@Override
+						public void onClick(ClickEvent clickEvent) {
+							button.onClick(clickEvent);
+						}
+					};
+					button1.setSlot(slot);
+					getButtons().put(slot, button1);
+				}
+			} else {
+				// no fill slots set
+				button.setSlot(slot);
+				getButtons().put(slot, button);
 			}
 		} else {
-			// no fill slots set
-			button.setSlot(slot);
-			getButtons().put(slot, button);
+			fillItems.add(button);
+			// fill empty slots
+
 		}
+	}
+
+	private void addFillSlots() {
+		for (BInventoryButton button : fillItems) {
+			for (int i = 0; i < getInventorySize(); i++) {
+				boolean slotExist = false;
+				for (Integer exist : getButtons().keySet()) {
+					if (exist.intValue() == i) {
+						slotExist = true;
+					}
+				}
+				if (!slotExist) {
+					BInventoryButton button1 = new BInventoryButton(button) {
+
+						@Override
+						public void onClick(ClickEvent clickEvent) {
+							button.onClick(clickEvent);
+						}
+					};
+					button1.setSlot(i);
+					getButtons().put(i, button1);
+				}
+			}
+		}
+		fillItems.clear();
 	}
 
 	/**
@@ -239,10 +272,23 @@ public class BInventory {
 	}
 
 	public void closeInv(Player p, BInventoryButton b) {
-		if ((closeInv && (b != null && b.isCloseInv())) || pages) {
-			if (p.getOpenInventory().getTopInventory().equals(inv) || pages) {
-				forceClose(p);
-			}
+		if (!p.getOpenInventory().getTopInventory().equals(inv)) {
+			return;
+		}
+
+		if (pages) {
+			forceClose(p);
+			return;
+		}
+
+		if (closeInv && (b == null || !b.isCloseInvSet())) {
+			forceClose(p);
+			return;
+		}
+
+		if (b != null && b.isCloseInvSet() && b.isCloseInv()) {
+			forceClose(p);
+			return;
 		}
 	}
 
@@ -469,6 +515,7 @@ public class BInventory {
 				}
 			}
 		}
+		addFillSlots();
 		BInventory inventory = this;
 
 		if (inventory.getHighestSlot() >= maxInvSize) {

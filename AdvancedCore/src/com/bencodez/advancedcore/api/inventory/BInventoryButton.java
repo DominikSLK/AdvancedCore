@@ -9,6 +9,7 @@ import java.util.List;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
+import com.bencodez.advancedcore.AdvancedCorePlugin;
 import com.bencodez.advancedcore.api.inventory.BInventory.ClickEvent;
 import com.bencodez.advancedcore.api.item.ItemBuilder;
 import com.bencodez.advancedcore.api.messages.StringParser;
@@ -28,6 +29,9 @@ public abstract class BInventoryButton {
 
 	@Getter
 	private boolean closeInv = true;
+	
+	@Getter
+	private boolean closeInvSet = false;
 
 	private HashMap<String, Object> data = new HashMap<String, Object>();
 
@@ -41,6 +45,9 @@ public abstract class BInventoryButton {
 	/** The slot. */
 	private int slot = -1;
 
+	@Getter
+	private boolean fillEmptySlots = false;
+
 	public BInventoryButton(BInventoryButton button) {
 		setBuilder(button.getBuilder());
 		slot = button.getSlot();
@@ -51,6 +58,11 @@ public abstract class BInventoryButton {
 		setBuilder(item);
 		slot = item.getSlot();
 		fillSlots = item.getFillSlots();
+		fillEmptySlots = item.isFillEmptySlots();
+		if (item.isCloseGUISet()) {
+			closeInv = item.isCloseGUI();
+			closeInvSet = true;
+		}
 	}
 
 	public BInventoryButton(ItemStack item) {
@@ -71,6 +83,12 @@ public abstract class BInventoryButton {
 	public BInventoryButton addData(String key, Object object) {
 		getData().put(key, object);
 		return this;
+	}
+
+	public String getLastRewardsPath(Player player) {
+		String test = builder.getRewardsPath(player);
+		AdvancedCorePlugin.getInstance().debug("Path: " + test);
+		return test;
 	}
 
 	public BInventoryButton dontClose() {
@@ -168,6 +186,7 @@ public abstract class BInventoryButton {
 
 	public BInventoryButton setCloseInv(boolean value) {
 		closeInv = value;
+		closeInvSet = true;
 		return this;
 	}
 
